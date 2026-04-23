@@ -335,10 +335,43 @@
       );
     }
 
+    function parseLrc(text) {
+      const lines = [];
+      text.split(/\r?\n/).forEach(raw => {
+        const m = raw.match(/^\[(\d+):(\d+(?:\.\d+)?)\](.*)$/);
+        if (!m) return;
+        const time = parseInt(m[1], 10) * 60 + parseFloat(m[2]);
+        const txt = m[3].trim();
+        if (txt) lines.push({ time, text: txt });
+      });
+      lines.sort((a, b) => a.time - b.time);
+      return lines;
+    }
+
+    function currentLine(lines, t) {
+      let cur = "";
+      for (const { time, text } of lines) {
+        if (t + 0.05 >= time) cur = text; else break;
+      }
+      return cur;
+    }
+
     function MusicPlayer() {
       const audioRef = useRef();
       const [muted, setMuted] = useState(false);
       const [started, setStarted] = useState(false);
+      const [lrcs, setLrcs] = useState({ zh: [], en: [], hi: [] });
+      const [t, setT] = useState(0);
+
+      useEffect(() => {
+        Promise.all([
+          fetch("lyrics_zh.lrc").then(r => r.text()),
+          fetch("lyrics_en.lrc").then(r => r.text()),
+          fetch("lyrics_hi.lrc").then(r => r.text()),
+        ]).then(([z, e, h]) => {
+          setLrcs({ zh: parseLrc(z), en: parseLrc(e), hi: parseLrc(h) });
+        }).catch(() => {});
+      }, []);
 
       useEffect(() => {
         const startOnClick = () => {
@@ -357,9 +390,30 @@
         if (!started) { a.play().then(() => setStarted(true)).catch(() => {}); }
       };
 
+      const zh = currentLine(lrcs.zh, t);
+      const en = currentLine(lrcs.en, t);
+      const hi = currentLine(lrcs.hi, t);
+      const showBar = started && !muted && (zh || en || hi);
+
       return (
         <>
-          <audio ref={audioRef} src="music.mp3" loop preload="auto" />
+          <audio ref={audioRef} src="music.mp3" loop preload="auto"
+            onTimeUpdate={e => setT(e.target.currentTime)} />
+          {showBar && (
+            <div style={{
+              position: "fixed", top: 0, left: 0, right: 0, zIndex: 90,
+              background: "rgba(255,246,236,0.92)",
+              backdropFilter: "blur(8px)",
+              WebkitBackdropFilter: "blur(8px)",
+              borderBottom: "2px solid #f4845f",
+              padding: "10px 16px 12px",
+              textAlign: "center",
+            }}>
+              {zh && <div key={"zh-"+zh} className="slide-up" style={{ fontFamily: "'Fredoka One', cursive", fontSize: 18, color: "#2a1a0e", lineHeight: 1.25, marginBottom: 2 }}>{zh}</div>}
+              {en && <div key={"en-"+en} className="slide-up" style={{ fontSize: 13, color: "#5a3a2a", fontWeight: 700, lineHeight: 1.3, marginBottom: 1 }}>{en}</div>}
+              {hi && <div key={"hi-"+hi} className="slide-up" style={{ fontSize: 12, color: "#b08060", fontWeight: 600, lineHeight: 1.3 }}>{hi}</div>}
+            </div>
+          )}
           <button onClick={toggle} aria-label={muted ? "Unmute music" : "Mute music"} style={{
             position: "fixed", bottom: 20, right: 20, zIndex: 100,
             width: 48, height: 48, borderRadius: "50%", padding: 0,
