@@ -68,15 +68,15 @@
       to   { opacity: 1; transform: translateY(0); }
     }
     .slide-up { animation: slideUp 0.22s ease; }
-    @keyframes marqueeRL {
-      from { transform: translateX(100vw); }
-      to   { transform: translateX(-100%); }
+    @keyframes marqueeLoop {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-50%); }
     }
     .lyric-row { overflow: hidden; }
-    .lyric-line {
+    .lyric-loop {
       display: inline-block;
       white-space: nowrap;
-      animation: marqueeRL 14s linear forwards;
+      animation: marqueeLoop linear infinite;
     }
   </style>
 </head>
@@ -486,41 +486,27 @@
 [04:10.45]अपने आदर्शों को छोड़ देना कोई भी कर सकता है
 [04:16.62]फिर डर कैसा, अगर एक दिन बस तुम और मैं ही रह जाएँ?`;
 
-    const LRC_OFFSET = 10;
-
-    function parseLrc(text, offset = 0) {
+    function lrcToText(text) {
       const lines = [];
       text.split(/\r?\n/).forEach(raw => {
-        const m = raw.match(/^\[(\d+):(\d+(?:\.\d+)?)\](.*)$/);
+        const m = raw.match(/^\[\d+:\d+(?:\.\d+)?\](.*)$/);
         if (!m) return;
-        const time = parseInt(m[1], 10) * 60 + parseFloat(m[2]) - offset;
-        if (time < 0) return;
-        const txt = m[3].trim();
-        if (txt) lines.push({ time, text: txt });
+        const t = m[1].trim();
+        if (t && t !== lines[lines.length - 1]) lines.push(t);
       });
-      lines.sort((a, b) => a.time - b.time);
-      return lines;
+      return lines.join("   ✦   ");
     }
 
-    const LRC_PARSED = {
-      zh: parseLrc(LRC_ZH, LRC_OFFSET),
-      en: parseLrc(LRC_EN, LRC_OFFSET),
-      hi: parseLrc(LRC_HI, LRC_OFFSET),
+    const LYRIC_TICKER = {
+      zh: lrcToText(LRC_ZH),
+      en: lrcToText(LRC_EN),
+      hi: lrcToText(LRC_HI),
     };
-
-    function currentLine(lines, t) {
-      let cur = "";
-      for (const { time, text } of lines) {
-        if (t + 0.05 >= time) cur = text; else break;
-      }
-      return cur;
-    }
 
     function MusicPlayer() {
       const audioRef = useRef();
       const [muted, setMuted] = useState(false);
       const [started, setStarted] = useState(false);
-      const [t, setT] = useState(0);
 
       useEffect(() => {
         const startOnClick = () => {
@@ -539,15 +525,12 @@
         if (!started) { a.play().then(() => setStarted(true)).catch(() => {}); }
       };
 
-      const zh = currentLine(LRC_PARSED.zh, t);
-      const en = currentLine(LRC_PARSED.en, t);
-      const hi = currentLine(LRC_PARSED.hi, t);
-      const showBar = started && !muted && (zh || en || hi);
+      const showBar = started && !muted;
+      const sep = "   ✦   ";
 
       return (
         <>
-          <audio ref={audioRef} src="music.mp3" loop preload="auto"
-            onTimeUpdate={e => setT(e.target.currentTime)} />
+          <audio ref={audioRef} src="music.mp3" loop preload="auto" />
           {showBar && (
             <div style={{
               position: "fixed", top: 0, left: 0, right: 0, zIndex: 90,
@@ -559,13 +542,13 @@
               overflow: "hidden",
             }}>
               <div className="lyric-row" style={{ height: 26 }}>
-                {zh && <span key={"zh-"+zh} className="lyric-line" style={{ fontFamily: "'Fredoka One', cursive", fontSize: 18, color: "#2a1a0e", lineHeight: "26px" }}>{zh}</span>}
+                <span className="lyric-loop" style={{ fontFamily: "'Fredoka One', cursive", fontSize: 18, color: "#2a1a0e", lineHeight: "26px", animationDuration: "80s" }}>{LYRIC_TICKER.zh + sep + LYRIC_TICKER.zh + sep}</span>
               </div>
               <div className="lyric-row" style={{ height: 20 }}>
-                {en && <span key={"en-"+en} className="lyric-line" style={{ fontSize: 13, color: "#5a3a2a", fontWeight: 700, lineHeight: "20px" }}>{en}</span>}
+                <span className="lyric-loop" style={{ fontSize: 13, color: "#5a3a2a", fontWeight: 700, lineHeight: "20px", animationDuration: "100s" }}>{LYRIC_TICKER.en + sep + LYRIC_TICKER.en + sep}</span>
               </div>
               <div className="lyric-row" style={{ height: 20 }}>
-                {hi && <span key={"hi-"+hi} className="lyric-line" style={{ fontSize: 12, color: "#b08060", fontWeight: 600, lineHeight: "20px" }}>{hi}</span>}
+                <span className="lyric-loop" style={{ fontSize: 12, color: "#b08060", fontWeight: 600, lineHeight: "20px", animationDuration: "100s" }}>{LYRIC_TICKER.hi + sep + LYRIC_TICKER.hi + sep}</span>
               </div>
             </div>
           )}
