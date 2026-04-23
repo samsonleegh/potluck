@@ -503,7 +503,7 @@
       hi: lrcToText(LRC_HI),
     };
 
-    function MusicPlayer() {
+    function MusicPlayer({ onActiveChange }) {
       const audioRef = useRef();
       const [muted, setMuted] = useState(false);
       const [started, setStarted] = useState(false);
@@ -526,6 +526,7 @@
       };
 
       const showBar = started && !muted;
+      useEffect(() => { onActiveChange?.(showBar); }, [showBar]);
       const sep = "   ✦   ";
 
       return (
@@ -576,6 +577,7 @@
       const [subtitleDraft, setSubtitleDraft] = useState("");
       const [descriptionDraft, setDescriptionDraft] = useState("");
       const [deleteConfirm, setDeleteConfirm] = useState(null);
+      const [musicActive, setMusicActive] = useState(false);
       const fileRef = useRef();
 
       useEffect(() => {
@@ -684,7 +686,7 @@
       );
 
       return (
-        <div style={{ maxWidth: 900, margin: "0 auto", padding: "36px 16px 60px" }}>
+        <div style={{ maxWidth: 900, margin: "0 auto", padding: `${musicActive ? 100 : 36}px 16px 60px`, transition: "padding-top 0.3s" }}>
 
           {/* Header */}
           <div style={{ textAlign: "center", marginBottom: "2.5rem" }}>
@@ -736,7 +738,7 @@
 
           <p style={{ textAlign: "center", marginTop: "2.5rem", fontSize: 11, color: "#d0b8a0", fontWeight: 600 }}>Live — visible to everyone with the link ✨</p>
 
-          <MusicPlayer />
+          <MusicPlayer onActiveChange={setMusicActive} />
 
           {modal && <DishForm modal={modal} form={form} setForm={setForm} onSave={handleSave} onClose={() => setModal(null)} fileRef={fileRef} handlePhoto={handlePhoto} />}
 
