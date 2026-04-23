@@ -267,22 +267,31 @@
       { bg: "#EAF4FF", border: "#5aabf5" }, { bg: "#F3F0FF", border: "#9b7ff5" },
     ];
 
-    function CommentBubble({ comment }) {
+    function CommentBubble({ comment, onDelete }) {
+      const [hover, setHover] = useState(false);
       const c = COMMENT_COLORS[comment.name.charCodeAt(0) % COMMENT_COLORS.length];
       return (
-        <div className="slide-up" style={{ background: c.bg, border: `2px solid ${c.border}`, borderRadius: 16, padding: "12px 14px", marginBottom: 10 }}>
-          <p style={{ fontWeight: 800, fontSize: 13, color: "#2a1a0e", marginBottom: 4 }}>
-            {comment.name}
-            <span style={{ fontWeight: 600, fontSize: 11, color: "#b08060", marginLeft: 8 }}>
-              {new Date(comment.at).toLocaleDateString("en-SG", { day: "numeric", month: "short" })}
-            </span>
-          </p>
+        <div className="slide-up"
+          onMouseEnter={() => setHover(true)}
+          onMouseLeave={() => setHover(false)}
+          style={{ background: c.bg, border: `2px solid ${c.border}`, borderRadius: 16, padding: "12px 14px", marginBottom: 10, position: "relative" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+            <p style={{ fontWeight: 800, fontSize: 13, color: "#2a1a0e", marginBottom: 4 }}>
+              {comment.name}
+              <span style={{ fontWeight: 600, fontSize: 11, color: "#b08060", marginLeft: 8 }}>
+                {new Date(comment.at).toLocaleDateString("en-SG", { day: "numeric", month: "short" })}
+              </span>
+            </p>
+            {hover && (
+              <button onClick={() => onDelete(comment.id)} className="btn-danger" style={{ fontSize: 11, padding: "3px 10px", flexShrink: 0 }}>✕</button>
+            )}
+          </div>
           <p style={{ fontSize: 14, color: "#3a2a1a", lineHeight: 1.55 }}>{comment.message}</p>
         </div>
       );
     }
 
-    function CommentsSection({ comments, onAdd }) {
+    function CommentsSection({ comments, onAdd, onDelete }) {
       const [name, setName] = useState("");
       const [message, setMessage] = useState("");
       const canPost = name.trim() && message.trim();
@@ -310,7 +319,7 @@
               <p style={{ fontSize: 13, color: "#c0a898", fontWeight: 600 }}>No messages yet — be the first to hype! 🎊</p>
             </div>
           ) : (
-            <div>{[...comments].reverse().map(c => <CommentBubble key={c.id} comment={c} />)}</div>
+            <div>{[...comments].reverse().map(c => <CommentBubble key={c.id} comment={c} onDelete={onDelete} />)}</div>
           )}
         </div>
       );
@@ -407,6 +416,12 @@
         store.set("potluck:comments", JSON.stringify(updated));
       };
 
+      const deleteComment = (id) => {
+        const updated = comments.filter(c => c.id !== id);
+        setComments(updated);
+        store.set("potluck:comments", JSON.stringify(updated));
+      };
+
       const totalCount = Object.values(dishes).reduce((s, a) => s + a.length, 0);
 
       if (loading) return (
@@ -464,7 +479,7 @@
           </div>
 
           {/* Hype Wall */}
-          <CommentsSection comments={comments} onAdd={addComment} />
+          <CommentsSection comments={comments} onAdd={addComment} onDelete={deleteComment} />
 
           <p style={{ textAlign: "center", marginTop: "2.5rem", fontSize: 11, color: "#d0b8a0", fontWeight: 600 }}>Saved in your browser's local storage</p>
 
