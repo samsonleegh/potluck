@@ -68,6 +68,16 @@
       to   { opacity: 1; transform: translateY(0); }
     }
     .slide-up { animation: slideUp 0.22s ease; }
+    @keyframes marqueeRL {
+      from { transform: translateX(100vw); }
+      to   { transform: translateX(-100%); }
+    }
+    .lyric-row { overflow: hidden; }
+    .lyric-line {
+      display: inline-block;
+      white-space: nowrap;
+      animation: marqueeRL 14s linear forwards;
+    }
   </style>
 </head>
 <body>
@@ -476,12 +486,15 @@
 [04:10.45]अपने आदर्शों को छोड़ देना कोई भी कर सकता है
 [04:16.62]फिर डर कैसा, अगर एक दिन बस तुम और मैं ही रह जाएँ?`;
 
-    function parseLrc(text) {
+    const LRC_OFFSET = 10;
+
+    function parseLrc(text, offset = 0) {
       const lines = [];
       text.split(/\r?\n/).forEach(raw => {
         const m = raw.match(/^\[(\d+):(\d+(?:\.\d+)?)\](.*)$/);
         if (!m) return;
-        const time = parseInt(m[1], 10) * 60 + parseFloat(m[2]);
+        const time = parseInt(m[1], 10) * 60 + parseFloat(m[2]) - offset;
+        if (time < 0) return;
         const txt = m[3].trim();
         if (txt) lines.push({ time, text: txt });
       });
@@ -489,7 +502,11 @@
       return lines;
     }
 
-    const LRC_PARSED = { zh: parseLrc(LRC_ZH), en: parseLrc(LRC_EN), hi: parseLrc(LRC_HI) };
+    const LRC_PARSED = {
+      zh: parseLrc(LRC_ZH, LRC_OFFSET),
+      en: parseLrc(LRC_EN, LRC_OFFSET),
+      hi: parseLrc(LRC_HI, LRC_OFFSET),
+    };
 
     function currentLine(lines, t) {
       let cur = "";
@@ -538,12 +555,18 @@
               backdropFilter: "blur(8px)",
               WebkitBackdropFilter: "blur(8px)",
               borderBottom: "2px solid #f4845f",
-              padding: "10px 16px 12px",
-              textAlign: "center",
+              padding: "8px 0 10px",
+              overflow: "hidden",
             }}>
-              {zh && <div key={"zh-"+zh} className="slide-up" style={{ fontFamily: "'Fredoka One', cursive", fontSize: 18, color: "#2a1a0e", lineHeight: 1.25, marginBottom: 2 }}>{zh}</div>}
-              {en && <div key={"en-"+en} className="slide-up" style={{ fontSize: 13, color: "#5a3a2a", fontWeight: 700, lineHeight: 1.3, marginBottom: 1 }}>{en}</div>}
-              {hi && <div key={"hi-"+hi} className="slide-up" style={{ fontSize: 12, color: "#b08060", fontWeight: 600, lineHeight: 1.3 }}>{hi}</div>}
+              <div className="lyric-row" style={{ height: 26 }}>
+                {zh && <span key={"zh-"+zh} className="lyric-line" style={{ fontFamily: "'Fredoka One', cursive", fontSize: 18, color: "#2a1a0e", lineHeight: "26px" }}>{zh}</span>}
+              </div>
+              <div className="lyric-row" style={{ height: 20 }}>
+                {en && <span key={"en-"+en} className="lyric-line" style={{ fontSize: 13, color: "#5a3a2a", fontWeight: 700, lineHeight: "20px" }}>{en}</span>}
+              </div>
+              <div className="lyric-row" style={{ height: 20 }}>
+                {hi && <span key={"hi-"+hi} className="lyric-line" style={{ fontSize: 12, color: "#b08060", fontWeight: 600, lineHeight: "20px" }}>{hi}</span>}
+              </div>
             </div>
           )}
           <button onClick={toggle} aria-label={muted ? "Unmute music" : "Mute music"} style={{
