@@ -9,6 +9,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -86,10 +88,18 @@
     const EMPTY_FORM = { name: "", person: "", remarks: "", link: "", photo: null };
     const REACTION_EMOJIS = ["🙌","😍","🔥","😋","👏","🥳","💯","❤️"];
 
-    const store = {
-      get: (key) => { try { return localStorage.getItem(key); } catch { return null; } },
-      set: (key, val) => { try { localStorage.setItem(key, val); } catch {} },
-    };
+    firebase.initializeApp({
+      apiKey: "AIzaSyBNA57jbn6jaw7Gjv9PMbg9CKdS6SJ7avc",
+      authDomain: "potluck-8c407.firebaseapp.com",
+      projectId: "potluck-8c407",
+      storageBucket: "potluck-8c407.firebasestorage.app",
+      messagingSenderId: "1020162768374",
+      appId: "1:1020162768374:web:239840473cedbc46141bd7",
+    });
+    const db = firebase.firestore();
+    const eventRef = db.collection("events").doc("main");
+    const dishesRef = eventRef.collection("dishes");
+    const commentsRef = eventRef.collection("comments");
 
     async function compressImage(file) {
       return new Promise((resolve) => {
@@ -344,18 +354,38 @@
       useEffect(() => {
         const empty = {};
         SECTIONS.forEach(s => empty[s.id] = []);
-        const t = store.get("potluck:title"); if (t) setTitle(t);
-        const sub = store.get("potluck:subtitle"); if (sub) setSubtitle(sub);
-        const desc = store.get("potluck:description"); if (desc) setDescription(desc);
-        for (const s of SECTIONS) {
-          try { const r = store.get(`potluck:dishes:${s.id}`); if (r) empty[s.id] = JSON.parse(r); } catch {}
-        }
-        try { const c = store.get("potluck:comments"); if (c) setComments(JSON.parse(c)); } catch {}
         setDishes(empty);
-        setLoading(false);
-      }, []);
 
-      const persist = (id, list) => store.set(`potluck:dishes:${id}`, JSON.stringify(list));
+        let gotEvent = false, gotDishes = false, gotComments = false;
+        const ready = () => { if (gotEvent && gotDishes && gotComments) setLoading(false); };
+
+        const unsubEvent = eventRef.onSnapshot(snap => {
+          const d = snap.data() || {};
+          if (d.title !== undefined) setTitle(d.title);
+          if (d.subtitle !== undefined) setSubtitle(d.subtitle);
+          if (d.description !== undefined) setDescription(d.description);
+          gotEvent = true; ready();
+        });
+
+        const unsubDishes = dishesRef.onSnapshot(snap => {
+          const grouped = {};
+          SECTIONS.forEach(s => grouped[s.id] = []);
+          const docs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          docs.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+          docs.forEach(d => { if (grouped[d.sectionId]) grouped[d.sectionId].push(d); });
+          setDishes(grouped);
+          gotDishes = true; ready();
+        });
+
+        const unsubComments = commentsRef.onSnapshot(snap => {
+          const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          list.sort((a, b) => new Date(a.at) - new Date(b.at));
+          setComments(list);
+          gotComments = true; ready();
+        });
+
+        return () => { unsubEvent(); unsubDishes(); unsubComments(); };
+      }, []);
 
       const openAdd = (sectionId) => { setForm(EMPTY_FORM); setModal({ sectionId, mode: "add" }); };
       const openEdit = (sectionId, dish) => {
@@ -366,32 +396,32 @@
       const handleSave = () => {
         if (!form.name.trim() || !form.person.trim()) return;
         const { sectionId, mode, dishId } = modal;
-        const current = dishes[sectionId] || [];
-        const newList = mode === "add"
-          ? [...current, { id: Date.now().toString(), name: form.name.trim(), person: form.person.trim(), remarks: form.remarks.trim(), link: form.link.trim(), photo: form.photo, reactions: {} }]
-          : current.map(d => d.id === dishId ? { ...d, name: form.name.trim(), person: form.person.trim(), remarks: form.remarks.trim(), link: form.link.trim(), photo: form.photo } : d);
-        setDishes(prev => ({ ...prev, [sectionId]: newList }));
-        persist(sectionId, newList);
+        const base = {
+          sectionId,
+          name: form.name.trim(),
+          person: form.person.trim(),
+          remarks: form.remarks.trim(),
+          link: form.link.trim(),
+          photo: form.photo || null,
+        };
+        if (mode === "add") {
+          const id = Date.now().toString();
+          dishesRef.doc(id).set({ ...base, reactions: {}, createdAt: Date.now() });
+        } else {
+          dishesRef.doc(dishId).set(base, { merge: true });
+        }
         setModal(null);
       };
 
       const handleDelete = () => {
-        const { sectionId, dishId } = deleteConfirm;
-        const newList = (dishes[sectionId] || []).filter(d => d.id !== dishId);
-        setDishes(prev => ({ ...prev, [sectionId]: newList }));
-        persist(sectionId, newList);
+        dishesRef.doc(deleteConfirm.dishId).delete();
         setDeleteConfirm(null);
       };
 
       const handleReact = (sectionId, dishId, emoji) => {
-        const newList = (dishes[sectionId] || []).map(d => {
-          if (d.id !== dishId) return d;
-          const reactions = { ...(d.reactions || {}) };
-          reactions[emoji] = (reactions[emoji] || 0) + 1;
-          return { ...d, reactions };
+        dishesRef.doc(dishId).update({
+          [`reactions.${emoji}`]: firebase.firestore.FieldValue.increment(1),
         });
-        setDishes(prev => ({ ...prev, [sectionId]: newList }));
-        persist(sectionId, newList);
       };
 
       const handlePhoto = async (e) => {
@@ -406,20 +436,16 @@
         const t = titleDraft.trim() || title;
         const s = subtitleDraft.trim() || subtitle;
         const d = descriptionDraft.trim();
-        setTitle(t); setSubtitle(s); setDescription(d); setEditingTitle(false);
-        store.set("potluck:title", t); store.set("potluck:subtitle", s); store.set("potluck:description", d);
+        setEditingTitle(false);
+        eventRef.set({ title: t, subtitle: s, description: d }, { merge: true });
       };
 
       const addComment = (comment) => {
-        const updated = [...comments, comment];
-        setComments(updated);
-        store.set("potluck:comments", JSON.stringify(updated));
+        commentsRef.doc(comment.id).set(comment);
       };
 
       const deleteComment = (id) => {
-        const updated = comments.filter(c => c.id !== id);
-        setComments(updated);
-        store.set("potluck:comments", JSON.stringify(updated));
+        commentsRef.doc(id).delete();
       };
 
       const totalCount = Object.values(dishes).reduce((s, a) => s + a.length, 0);
@@ -481,7 +507,7 @@
           {/* Hype Wall */}
           <CommentsSection comments={comments} onAdd={addComment} onDelete={deleteComment} />
 
-          <p style={{ textAlign: "center", marginTop: "2.5rem", fontSize: 11, color: "#d0b8a0", fontWeight: 600 }}>Saved in your browser's local storage</p>
+          <p style={{ textAlign: "center", marginTop: "2.5rem", fontSize: 11, color: "#d0b8a0", fontWeight: 600 }}>Live — visible to everyone with the link ✨</p>
 
           {modal && <DishForm modal={modal} form={form} setForm={setForm} onSave={handleSave} onClose={() => setModal(null)} fileRef={fileRef} handlePhoto={handlePhoto} />}
 
